@@ -7,3 +7,7 @@ KIX is a web-based open source servicedesk. The software is a fork of OTRS 5 cre
 
 **PLEASE NOTE**  
 At the moment, the Liveness and Readiness probes are missing but will be added in the future. There's a simple bash script `/readiness.sh` in the container which you can use for the Readiness probe.
+
+**FURTHER INFORMATION**  
+This template is based on the official docker image for KIX: https://hub.docker.com/r/capeit/kix/.
+Please have a look for further information about usage and limitations.
