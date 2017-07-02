@@ -1,0 +1,286 @@
+apiVersion: v1
+kind: Template
+metadata:
+  annotations:
+    openshift.io/display-name: KIX 2017 (Persistent)
+    template.openshift.io/provider-display-name: c.a.p.e. IT GmbH
+    template.openshift.io/support-url: https://www.kixdesk.com/
+    template.openshift.io/long-description: KIX template for the PaaS platform OpenShift from Red Hat.
+    description: KIX 2017 with a MySQL database running with a persistent storage.
+      Use this template if you want to run KIX 2017 for ITSM / CMDB.
+    iconClass: icon-perl
+    tags: kix,kix17,quickstart,perl,mysql,instant-app
+  creationTimestamp: null
+  name: kix17
+objects:
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: ${DATABASE_SERVICE_NAME}
+  spec:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+      requests:
+        storage: ${VOLUME_CAPACITY}
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    labels:
+      app: mysql-persistent
+      template: mysql-persistent-template
+    name: mysql
+  spec:
+    replicas: 1
+    selector:
+      name: mysql
+    strategy:
+      recreateParams:
+        timeoutSeconds: 600
+      type: Recreate
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          name: mysql
+      spec:
+        containers:
+        - env:
+          - name: MYSQL_USER
+            value: ${MYSQL_USER}
+          - name: MYSQL_PASSWORD
+            value: ${MYSQL_PASSWORD}
+          - name: MYSQL_DATABASE
+            value: ${MYSQL_DATABASE}
+          - name: MYSQL_ROOT_PASSWORD
+            value: ${MYSQL_ROOT_PASSWORD}
+          image: registry.access.redhat.com/rhscl/mysql-57-rhel7:latest
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: 3306
+            timeoutSeconds: 1
+          name: mysql
+          ports:
+          - containerPort: 3306
+            protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+            exec:
+              command:
+              - /bin/sh
+              - -i
+              - -c
+              - MYSQL_PWD="$MYSQL_PASSWORD" mysql -h 127.0.0.1 -u $MYSQL_USER -D $MYSQL_DATABASE
+                -e 'SELECT 1'
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources:
+            limits:
+              memory: ${DATABASE_MEMORY_LIMIT}
+          securityContext:
+            capabilities: {}
+            privileged: false
+          terminationMessagePath: /dev/termination-log
+          volumeMounts:
+          - mountPath: /var/lib/mysql/data
+            name: ${DATABASE_SERVICE_NAME}-data
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+        volumes:
+        - name: ${DATABASE_SERVICE_NAME}-data
+          persistentVolumeClaim:
+            claimName: ${DATABASE_SERVICE_NAME}
+    test: false
+    triggers:
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - mysql
+        from:
+          kind: ImageStreamTag
+          name: mysql:latest
+          namespace: openshift
+      type: ImageChange
+    - type: ConfigChange
+  status: {}
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    annotations:
+      openshift.io/generated-by: OpenShiftNewApp
+      service.alpha.openshift.io/dependencies: '[{"name": "mysql", "namespace": "", "kind": "DeploymentConfig"}]'
+    creationTimestamp: null
+    labels:
+      app: kix
+    name: kix
+  spec:
+    replicas: 1
+    selector:
+      app: kix
+      deploymentconfig: kix
+    strategy:
+      resources: {}
+      rollingParams:
+        intervalSeconds: 1
+        maxSurge: 25%
+        maxUnavailable: 25%
+        timeoutSeconds: 600
+        updatePeriodSeconds: 1
+      type: Rolling
+    template:
+      metadata:
+        annotations:
+          openshift.io/generated-by: OpenShiftNewApp
+          service.alpha.openshift.io/dependencies: '[{"name": "mysql", "namespace": "", "kind": "Service"}]'
+        creationTimestamp: null
+        labels:
+          app: kix
+          deploymentconfig: kix
+      spec:
+        containers:
+        - env:
+          - name: KIXDB_HOST
+            value: mysql
+          - name: KIXDB_DBMS
+            value: mysql
+          - name: KIXDB_DATABASE
+            value: ${MYSQL_DATABASE}
+          - name: KIXDB_USER
+            value: ${MYSQL_USER}
+          - name: KIXDB_PASSWORD
+            value: ${MYSQL_PASSWORD}
+          image: capeit/kix:17
+          imagePullPolicy: Always
+          name: kix
+          ports:
+          - containerPort: 8080
+            protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+        volumes:
+        - emptyDir: {}
+          name: kix-volume-1
+    test: false
+    triggers:
+    - type: ConfigChange
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - kix
+        from:
+          kind: ImageStreamTag
+          name: kix:17
+          namespace: openshift
+      type: ImageChange
+  status: {}
+- apiVersion: v1
+  kind: Route
+  metadata:
+    annotations:
+      openshift.io/host.generated: "true"
+    creationTimestamp: null
+    labels:
+      app: kix
+    name: kix
+  spec:
+    port:
+      targetPort: 80-tcp
+    to:
+      kind: Service
+      name: kix
+  status:
+    ingress: null
+- apiVersion: v1
+  kind: Service
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: mysql-persistent
+      template: mysql-persistent-template
+    name: mysql
+  spec:
+    ports:
+    - name: mysql
+      port: 3306
+      protocol: TCP
+      targetPort: 3306
+    selector:
+      name: mysql
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      openshift.io/generated-by: OpenShiftNewApp
+    creationTimestamp: null
+    labels:
+      app: kix
+    name: kix
+  spec:
+    ports:
+    - name: 80-tcp
+      port: 80
+      protocol: TCP
+      targetPort: 8080
+    selector:
+      app: kix
+      deploymentconfig: kix
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}
+parameters:
+- description: Maximum amount of memory the database can use.
+  displayName: Database Memory Limit
+  name: DATABASE_MEMORY_LIMIT
+  value: 512Mi
+- description: The name of the OpenShift Service exposed for the database.
+  displayName: Database Service Name
+  name: DATABASE_SERVICE_NAME
+  required: true
+  value: mysql
+- description: Username for Mysql user that will be used for accessing the database.
+  displayName: Mysql User
+  name: MYSQL_USER
+  required: true
+  value: kix
+- description: Password for the Mysql user.
+  displayName: Mysql Password
+  from: '[a-zA-Z0-9]{16}'
+  generate: expression
+  name: MYSQL_PASSWORD
+  required: true
+- description: Name of the Mysql database accessed.
+  displayName: Mysql Database Name
+  name: MYSQL_DATABASE
+  required: true
+  value: kix17
+- description: Password for the database root user.
+  displayName: Mysql ROOT Password
+  from: '[a-zA-Z0-9]{16}'
+  generate: expression
+  name: MYSQL_ROOT_PASSWORD
+  required: true
+- description: Volume space available for data, e.g. 512Mi, 2Gi.
+  displayName: Volume Capacity
+  name: VOLUME_CAPACITY
+  required: true
+  value: 1Gi
