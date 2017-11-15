@@ -1,4 +1,4 @@
-![KIX logo](http://www.kixdesk.com/files/layout/logo.png)
+![KIX logo](http://www.kixdesk.com/files/kixdesk/layout/logo.png)
 
 # kix-openshift
 KIX template for the PaaS platform OpenShift from Red Hat.
